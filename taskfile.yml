@@ -22,6 +22,11 @@ tasks:
     cmds:
       - go build -o ./.runtime/example ./cmd/example/*.go
     silent: true
+  run:
+    deps: [build]
+    cmds:
+      - ./.runtime/example -env=development -lt=2s
+    silent: true
   run-dev:
     cmds:
       - docker-compose -f ./deployments/development/docker-compose.yaml up -d --build

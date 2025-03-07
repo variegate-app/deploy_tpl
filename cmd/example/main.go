@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-const defaultLifetime = 5 * time.Second
+const defaultLifetime = 1 * time.Second
+const defaultEnvironment = "production"
 
 type Config struct {
 	Environment string
@@ -16,7 +17,7 @@ type Config struct {
 
 func main() {
 	c := new(Config)
-	flag.StringVar(&c.Environment, "env", "production", "runtime environment type")
+	flag.StringVar(&c.Environment, "env", defaultEnvironment, "runtime environment type")
 	flag.DurationVar(&c.Lifetime, "lt", defaultLifetime, "application lifetime")
 	flag.Parse()
 
@@ -29,10 +30,10 @@ func main() {
 	for {
 		select {
 		case <-t.C:
-			fmt.Println("new tick in ", c.Environment)
+			fmt.Println("Hello from", c.Environment)
 			t.Reset(time.Second)
 		case <-ctx.Done():
-			fmt.Println(ctx.Err())
+			fmt.Println("Goodbye")
 			return
 		}
 	}

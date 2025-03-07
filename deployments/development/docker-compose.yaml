@@ -9,6 +9,7 @@ services:
       args:
         APPLICATION_NAME: ${APP_DEV_FOLDER_CMD}
     command: "-env=${APP_DEV_ENVIRONMENT}"
+    restart: unless-stopped
 
 volumes:
   dev-store:
