@@ -2,14 +2,47 @@ name: CI
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 env:
     REGISTRY: ghcr.io
 
 jobs:
+  frontend:
+    name: Create frontend Docker Image
+    runs-on: ubuntu-latest
+    needs: define-matrix
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Логин в Docker Registry (выполняется только для событий, кроме pull_request)
+      - name: Login to Docker Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.CI_TOKEN }}
+
+      - name: Build and push frontend
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployments/production/nginx/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}/frontend:${{ github.event.release.tag_name }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
   define-matrix:
     name: Find applications
     runs-on: ubuntu-latest
@@ -54,9 +87,9 @@ jobs:
       fail-fast: false
       matrix:
         application: ${{ fromJSON(needs.define-matrix.outputs.application) }}
-        # не собираем приложение pool
+        # не собираем приложение releaser
         exclude:
-          - application: pool
+          - application: releaser
     permissions:
       contents: read
       packages: write
@@ -75,26 +108,26 @@ jobs:
           password: ${{ secrets.CI_TOKEN }}
 
       # Создаем метаданные и строим образы для каждого приложения
-      # ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.application }}:v${{ github.ref_name }}
+      # ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.application }}:${{ github.event.release.tag_name }}
       - name: Build and push ${{ matrix.application }}
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deployments/Dockerfile
+          file: deployments/production/gobuild.Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.application }}:latest
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.application }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.application }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.application }}:${{ github.event.release.tag_name }}
           labels: |
-            org.opencontainers.image.source=${{ github.repositoryUrl}}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           build-args: APPLICATION_NAME=${{ matrix.application }}
+
   release-create:
     name: Create Release
     runs-on: ubuntu-latest
     needs: 
       - define-matrix
-      - ci
     strategy:
       fail-fast: false
       matrix:
@@ -128,3 +161,23 @@ jobs:
           tag: ${{ github.ref }}
           overwrite: true
           body: ${{ steps.release-notes.outputs.RELEASE_BODY }}
+
+  alow_to_deploy:
+    name: Send deploy button
+    runs-on: ubuntu-latest
+    needs:
+      - frontend
+      - ci
+      - release-create
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Send event
+        run: |
+          rel=$(git log $(git describe HEAD~ --tags --abbrev=0)..HEAD --pretty='format:* %h %s%n  * %an <%ae>' --no-merges)
+          curl -X POST \
+          -F 'text="новый релиз ${{ github.event.release.tag_name }}"
+          "$rel"
+          "See changes: https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }}"' \
+          -F 'reply_markup={"inline_keyboard":[[{"text":"Deploy ${{ github.event.release.tag_name }}","callback_data":"${{ github.event.release.tag_name }}"}]],"selective":true}' \
+          https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage?chat_id=${{ secrets.TELEGRAM_TO }}
