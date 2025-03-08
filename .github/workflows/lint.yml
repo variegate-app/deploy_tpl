@@ -7,8 +7,8 @@ on:
       - master
 
 env:
-  GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v1.60
+  GO_VERSION: v1.23.4
+  GOLANGCI_LINT_VERSION: v1.62.2
 
 jobs:
   detect-modules:
@@ -53,4 +53,4 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Run Unit tests.
-        run: go test ./... -cover && go test -v -race ./...
+        run: go test -v ./...

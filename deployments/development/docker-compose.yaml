@@ -1,0 +1,15 @@
+services:
+  app_dev:
+    container_name: ${APP_DEV_NAME}
+    env_file: "./.env"
+    build:
+      context: ./../../
+      dockerfile: deployments/development/gobuild.Dockerfile
+      target: dev-runner
+      args:
+        APPLICATION_NAME: ${APP_DEV_FOLDER_CMD}
+    command: "-env=${APP_DEV_ENVIRONMENT}"
+    restart: unless-stopped
+
+volumes:
+  dev-store:
